@@ -1,0 +1,14 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: S3
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+Outputs:
+  MyBucket:
+    Description: The S3 bucket
+    Value:
+      Ref: MyBucket
