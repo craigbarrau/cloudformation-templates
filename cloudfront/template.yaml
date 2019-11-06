@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  name:
+    Description: Name to be propagated to resources
+    Type: String
+  domainName:
+    Description: Domain name
+    Type: String
+  hostedZoneId:
+    Description: Hosted zone
+    Type: String
+  certificate:
+    Description: Wildcard certificate
+    Type: String
+Resources:
+  FrontendApp:
+     Type: AWS::S3::Bucket
+     Properties:
+       BucketName: !Sub "${name}"
+       WebsiteConfiguration:
+           IndexDocument: index.html
+           ErrorDocument: index.html
+  FrontendBucketPolicy:
+     Type: AWS::S3::BucketPolicy
+     DependsOn: FrontendApp
+     Properties:
+         Bucket: !Ref FrontendApp
+         PolicyDocument:
+             Statement:
+                 -
+                   Action:
+                       - "s3:GetObject"
+                   Effect: "Allow"
+                   Resource:
+                       - !Join
+                          - ''
+                          - - 'arn:aws:s3:::'
+                            - !Ref FrontendApp
+                            - '/*'
+                   Principal: '*'
+  DNSRecord:
+    Type: AWS::Route53::RecordSet
+    DependsOn: CDN
+    Properties:
+      HostedZoneId: !Sub "/hostedzone/${hostedZoneId}"
+      Comment: Frontend DNS
+      Name: !Sub "${domainName}"
+      Type: CNAME
+      TTL: 300
+      ResourceRecords:
+      - !GetAtt 'CDN.DomainName'
+  CDN:
+    Type: AWS::CloudFront::Distribution
+    DependsOn:
+      - FrontendApp
+      - FrontendBucketPolicy
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !Sub "${name}.s3-website-${AWS::Region}.amazonaws.com"
+            Id: !Sub "S3-${name}"
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+        Aliases:
+          - !Sub "${domainName}"
+        ViewerCertificate:
+          AcmCertificateArn: !Ref certificate
+          SslSupportMethod: sni-only
+        DefaultCacheBehavior:
+          Compress: true
+          ForwardedValues:
+            Cookies:
+              Forward: none
+            QueryString: false
+          TargetOriginId: !Sub "S3-${name}"
+          ViewerProtocolPolicy: redirect-to-https
+        DefaultRootObject: index.html
+        Enabled: true
+      Tags:
+        - Key: Owner
+          Value: Shared
+Outputs:
+  CDN:
+    Value: !Ref CDN
+    Description: CDN Distribution
+  DomainName:
+    Value: !GetAtt CDN.DomainName
+    Description: CDN Domain Name
+  BucketName:
+    Value: !GetAtt FrontendApp.DomainName
+    Description: S3 domain name
